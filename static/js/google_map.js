@@ -25,7 +25,9 @@ function initMap() {
 
     console.log("Google Maps 載入成功");
 
-    // 載入 OSM 道路
+    // OSM 道路
     loadOSMLayer(map);
 
+    // 安全特徵
+    loadSafetyLayer(map);
 }

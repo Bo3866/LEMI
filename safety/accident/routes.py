@@ -8,8 +8,8 @@ from safety.accident.a1 import (
     get_a1_accidents
 )
 
-from safety.accident.spatial_match import (
-    match_accidents_to_roads
+from spatial.road_matcher import (
+    match_points_to_roads
 )
 
 from data_fetch.osm import (
@@ -55,7 +55,7 @@ def accidents_a1():
     # --------------------------
 
     matches = (
-        match_accidents_to_roads(
+        match_points_to_roads(
             accidents,
             roads,
             max_distance=80
@@ -71,7 +71,7 @@ def accidents_a1():
     for match in matches:
 
         accident = match[
-            "accident"
+            "point"
         ]
 
         road = match[
