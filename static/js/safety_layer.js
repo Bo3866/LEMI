@@ -1,148 +1,301 @@
-// ==============================
+// ======================================
 // 安全特徵圖層
-// ==============================
 //
-// 目前先使用 A1 交通事故測試。
-// 未來可以擴充 A2、路燈、犯罪、人口等安全特徵。
+// 不管目前是：
+// A1、A2、路燈、犯罪、人口......
 //
+// 都使用同一套 Z-score 染色邏輯。
+//
+// higher_is_safer：
+// true  → 數值越高越安全
+// false → 數值越高越危險
+//
+// 未來這個值會由資料庫提供。
+// ======================================
 
 
-// ==============================
-// 安全圖層管理
-// ==============================
+// ======================================
+// Z-score → 顏色
+// ======================================
 
-let safetyMarkers = [];
+function getColorByZScore(
+    zScore,
+    higherIsSafer
+) {
+
+    let value = zScore;
 
 
-// ==============================
-// 載入安全特徵
-// ==============================
+    // ----------------------------------
+    // 如果數值越高代表越安全
+    //
+    // 為了讓「紅色 = 高風險」
+    // 所以需要反轉 Z-score
+    // ----------------------------------
 
-function loadSafetyLayer(map) {
+    if (higherIsSafer) {
 
-    console.log("開始載入安全特徵...");
+        value = -value;
+    }
 
-    loadA1Accidents(map);
+
+    // ----------------------------------
+    // Z > 1
+    // ----------------------------------
+
+    if (value > 1) {
+
+        return "#D32F2F";
+    }
+
+
+    // ----------------------------------
+    // 0 < Z <= 1
+    // ----------------------------------
+
+    if (value > 0) {
+
+        return "#F57C00";
+    }
+
+
+    // ----------------------------------
+    // -1 < Z <= 0
+    // ----------------------------------
+
+    if (value > -1) {
+
+        return "#FBC02D";
+    }
+
+
+    // ----------------------------------
+    // Z <= -1
+    // ----------------------------------
+
+    return "#1976D2";
 }
 
 
-// ==============================
-// 載入 A1 事故
-// ==============================
+// ======================================
+// 套用道路 Z-score 顏色
+// ======================================
 
-async function loadA1Accidents(map) {
+function applyRoadZScoreColors(
+    roadStats,
+    higherIsSafer
+) {
 
-    try {
+    roadStats.forEach(
+        function(stat) {
 
-        const response = await fetch(
-            "/api/accidents-a1"
-        );
-
-        if (!response.ok) {
-            throw new Error(
-                `A1 API 錯誤：${response.status}`
-            );
-        }
-
-        const accidents = await response.json();
-
-        console.log(
-            "A1 事故資料載入成功，共有",
-            accidents.length,
-            "筆"
-        );
-
-
-        // ==============================
-        // 將事故資料畫到地圖
-        // ==============================
-
-        accidents.forEach(
-            accident => {
-
-                if (
-                    accident.lat == null ||
-                    accident.lng == null
-                ) {
-                    return;
-                }
-
-                const marker =
-                    new google.maps.Marker({
-
-                        position: {
-                            lat: Number(accident.lat),
-                            lng: Number(accident.lng)
-                        },
-
-                        map: map,
-
-                        title: "A1 交通事故"
-                    });
-
-
-                // ==============================
-                // 點擊事故點時顯示資訊
-                // ==============================
-
-                const infoWindow =
-                    new google.maps.InfoWindow({
-
-                        content: `
-                            <div>
-                                <strong>A1 交通事故</strong>
-                                <br>
-                                發生日期：
-                                ${accident.date ?? ""}
-                                <br>
-                                發生時間：
-                                ${accident.time ?? ""}
-                                <br>
-                                發生地點：
-                                ${accident.location ?? ""}
-                                <br>
-                                道路名稱：
-                                ${accident.roadName ?? "未知"}
-                                <br>
-                                距離道路：
-                                ${
-                                    accident.distance != null
-                                        ? Number(
-                                            accident.distance
-                                          ).toFixed(2)
-                                        : "未知"
-                                }
-                                公尺
-                            </div>
-                        `
-                    });
-
-
-                marker.addListener(
-                    "click",
-                    () => {
-
-                        infoWindow.open({
-                            anchor: marker,
-                            map: map
-                        });
-
-                    }
+            const color =
+                getColorByZScore(
+                    stat.zScore,
+                    higherIsSafer
                 );
 
 
-                // ==============================
-                // 保存 Marker
-                // ==============================
+            setRoadColor(
+                stat.roadIndex,
+                color
+            );
+        }
+    );
 
-                safetyMarkers.push(marker);
 
+    console.log(
+        "Z-score 道路染色完成，共",
+        roadStats.length,
+        "條道路"
+    );
+}
+
+
+// ======================================
+// 建立安全特徵 Marker
+// ======================================
+
+function createSafetyMarker(
+    map,
+    item
+) {
+
+    const marker =
+        new google.maps.Marker({
+
+            position: {
+                lat: item.lat,
+                lng: item.lng
+            },
+
+            map: map,
+
+            title:
+                item.location ||
+                "安全特徵"
+        });
+
+
+    const infoWindow =
+        new google.maps.InfoWindow({
+
+            content: `
+                <div>
+                    <b>安全特徵</b><br>
+                    地點：
+                    ${item.location || "無資料"}<br>
+                    道路：
+                    ${item.roadName || "無資料"}<br>
+                    距離道路：
+                    ${
+                        item.distance !== undefined
+                            ? item.distance.toFixed(2)
+                            : "無資料"
+                    } 公尺
+                </div>
+            `
+        });
+
+
+    marker.addListener(
+        "click",
+        function() {
+
+            infoWindow.open({
+                map: map,
+                anchor: marker
+            });
+        }
+    );
+
+
+    return marker;
+}
+
+
+// ======================================
+// 載入安全特徵
+// ======================================
+
+async function loadSafetyLayer(
+    map
+) {
+
+    console.log(
+        "開始載入安全特徵..."
+    );
+
+
+    try {
+
+        // ==================================
+        // 取得後端資料
+        // ==================================
+
+        const response =
+            await fetch(
+                "/api/accidents-a1"
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "安全特徵 API HTTP 錯誤：" +
+                response.status
+            );
+        }
+
+
+        const data =
+            await response.json();
+
+
+        // ==================================
+        // 道路統計
+        // ==================================
+
+        const roadStats =
+            data.roadStats || [];
+
+
+        // ==================================
+        // 安全特徵點
+        // ==================================
+
+        const accidents =
+            data.accidents || [];
+
+
+        // ==================================
+        // 取得特徵方向
+        //
+        // 現在暫時由 routes.py 提供
+        // 未來改成資料庫提供
+        // ==================================
+
+        const higherIsSafer =
+            data.higher_is_safer === true;
+
+
+        console.log(
+            "higher_is_safer：",
+            higherIsSafer
+        );
+
+        console.log(
+            "Z-score 範圍：",
+            Math.min(
+                ...roadStats.map(
+                    stat => stat.zScore
+                )
+            ),
+            "~",
+            Math.max(
+                ...roadStats.map(
+                    stat => stat.zScore
+                )
+            )
+        );
+
+
+        // ==================================
+        // Z-score 染色
+        // ==================================
+
+        applyRoadZScoreColors(
+            roadStats,
+            higherIsSafer
+        );
+
+
+        // ==================================
+        // 顯示安全特徵點
+        // ==================================
+
+        const safetyMarkers = [];
+
+
+        accidents.forEach(
+            function(item) {
+
+                const marker =
+                    createSafetyMarker(
+                        map,
+                        item
+                    );
+
+
+                safetyMarkers.push(
+                    marker
+                );
             }
         );
 
 
         console.log(
-            "A1 事故點已顯示，共",
+            "安全特徵點已顯示，共",
             safetyMarkers.length,
             "個"
         );
@@ -151,9 +304,8 @@ async function loadA1Accidents(map) {
     } catch (error) {
 
         console.error(
-            "載入 A1 事故資料失敗：",
+            "安全特徵載入失敗：",
             error
         );
-
     }
 }

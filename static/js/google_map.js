@@ -1,33 +1,67 @@
-// ==============================
-// Google Maps 基本設定
-// ==============================
-
-// 輔仁大學淨心堂
 const FJU_CENTER = {
     lat: 25.035806,
     lng: 121.433167
 };
 
 
-// ==============================
-// 建立 Google Map
-// ==============================
+// ======================================
+// Google Maps 初始化
+// ======================================
 
-function initMap() {
+async function initMap() {
 
-    const map = new google.maps.Map(
-        document.getElementById("map"),
-        {
-            center: FJU_CENTER,
-            zoom: 15
-        }
+    const map =
+        new google.maps.Map(
+            document.getElementById(
+                "map"
+            ),
+            {
+                center: FJU_CENTER,
+                zoom: 15
+            }
+        );
+
+
+    console.log(
+        "Google Maps 載入成功"
     );
 
-    console.log("Google Maps 載入成功");
 
-    // OSM 道路
-    loadOSMLayer(map);
+    try {
 
-    // 安全特徵
-    loadSafetyLayer(map);
+        // ==================================
+        // 1. 先載入 OSM
+        // ==================================
+
+        await loadOSMLayer(
+            map
+        );
+
+
+        console.log(
+            "OSM 已完成載入"
+        );
+
+
+        // ==================================
+        // 2. OSM 完成後
+        //    再載入安全特徵
+        // ==================================
+
+        await loadSafetyLayer(
+            map
+        );
+
+
+        console.log(
+            "安全特徵載入完成"
+        );
+
+    } catch (error) {
+
+        console.error(
+            "地圖初始化失敗：",
+            error
+        );
+    }
 }

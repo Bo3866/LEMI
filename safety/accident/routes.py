@@ -1,8 +1,18 @@
+# ======================================
+# A1 安全特徵設定
+# ======================================
+
+HIGHER_IS_SAFER = False
+
 # ==============================
-# A1 Flask API
+# 事故 Flask API
 # ==============================
 
 from flask import Blueprint, jsonify
+
+from data_fetch.osm import (
+    load_osm_roads
+)
 
 from safety.accident.a1 import (
     get_a1_accidents
@@ -12,14 +22,6 @@ from spatial.road_matcher import (
     match_points_to_roads
 )
 
-from data_fetch.osm import (
-    load_osm_roads
-)
-
-
-# ==============================
-# Blueprint
-# ==============================
 
 accident_bp = Blueprint(
     "accident",
@@ -27,115 +29,325 @@ accident_bp = Blueprint(
 )
 
 
-# ==============================
-# A1 事故 API
-# ==============================
+MAX_DISTANCE = 80
+
+
+def calculate_z_scores(values):
+    """
+    計算 Z-score。
+
+    Z = (X - 平均值) / 標準差
+
+    這裡使用母體標準差，
+    因為我們要分析的是研究範圍內「全部道路」。
+    """
+
+    if not values:
+        return []
+
+    mean = sum(values) / len(values)
+
+    variance = sum(
+        (value - mean) ** 2
+        for value in values
+    ) / len(values)
+
+    standard_deviation = variance ** 0.5
+
+    # 如果所有道路數值都一樣
+    if standard_deviation == 0:
+
+        return [
+            0
+            for _ in values
+        ]
+
+    return [
+        (value - mean) / standard_deviation
+        for value in values
+    ]
+
+
+def build_road_statistics(
+    roads,
+    matched_accidents
+):
+    """
+    統計每條道路的事故數量，
+    並計算 Z-score。
+    """
+
+    # --------------------------------
+    # 1. 建立每條道路的事故計數
+    # --------------------------------
+
+    accident_counts = [
+        0
+        for _ in roads
+    ]
+
+    for match in matched_accidents:
+
+        road_index = match["roadIndex"]
+
+        accident_counts[
+            road_index
+        ] += 1
+
+    # --------------------------------
+    # 2. 計算 Z-score
+    # --------------------------------
+
+    z_scores = calculate_z_scores(
+        accident_counts
+    )
+
+    # --------------------------------
+    # 3. 建立道路統計資料
+    # --------------------------------
+
+    road_stats = []
+
+    for road_index, road in enumerate(roads):
+
+        properties = road.get(
+            "properties",
+            {}
+        )
+
+        road_stats.append({
+            "roadIndex": road_index,
+
+            "value": accident_counts[
+                road_index
+            ],
+
+            "zScore": z_scores[
+                road_index
+            ],
+
+            "roadName": properties.get(
+                "name"
+            ),
+
+            "osmid": properties.get(
+                "osmid"
+            ),
+
+            "highway": properties.get(
+                "highway"
+            )
+        })
+
+    return road_stats
+
 
 @accident_bp.route(
     "/api/accidents-a1"
 )
 def accidents_a1():
 
-    # --------------------------
-    # 取得 A1
-    # --------------------------
+    # ==================================
+    # 1. 讀取 A1 事故資料
+    # ==================================
 
-    accidents = (
-        get_a1_accidents()
+    accidents = get_a1_accidents()
+
+    print(
+        "A1 事故資料：",
+        len(accidents),
+        "筆"
     )
 
-    # --------------------------
-    # 取得 OSM 道路
-    # --------------------------
+    # ==================================
+    # 2. 讀取 OSM 道路
+    # ==================================
 
     roads = load_osm_roads()
 
-    # --------------------------
-    # 事故 → 道路
-    # --------------------------
+    print(
+        "OSM 道路：",
+        len(roads),
+        "條"
+    )
 
-    matches = (
-        match_points_to_roads(
-            accidents,
-            roads,
-            max_distance=80
+    # ==================================
+    # 3. 將事故點匹配到道路
+    # ==================================
+
+    matched = match_points_to_roads(
+        points=accidents,
+        roads=roads,
+        max_distance=MAX_DISTANCE
+    )
+
+    print(
+        "成功匹配道路：",
+        len(matched),
+        "筆"
+    )
+
+    # ==================================
+    # 4. 建立道路統計 + Z-score
+    # ==================================
+
+    road_stats = build_road_statistics(
+        roads,
+        matched
+    )
+
+    print("========== 道路事故數量 ==========")
+
+    for stat in road_stats:
+        if stat["value"] > 0:
+            print(
+                "roadIndex:",
+                stat["roadIndex"],
+                "| 事故數:",
+                stat["value"],
+                "| Z-score:",
+                stat["zScore"],
+                "| 道路:",
+                stat["roadName"]
+            )
+
+    print("================================")
+
+    roads_with_accidents = [
+        stat
+        for stat in road_stats
+        if stat["value"] > 0
+    ]
+
+    print(
+        "有事故的道路數量：",
+        len(roads_with_accidents)
+    )
+
+    print(
+        "最高事故數：",
+        max(
+            stat["value"]
+            for stat in road_stats
         )
     )
 
-    # --------------------------
-    # 整理 API 回傳資料
-    # --------------------------
+    print("========== Z-score 檢查 ==========")
 
-    results = []
+    for stat in road_stats:
 
-    for match in matches:
+        if stat["value"] > 0:
 
-        accident = match[
-            "point"
-        ]
+            print(
+                "roadIndex:",
+                stat["roadIndex"],
+                "事故數:",
+                stat["value"],
+                "Z-score:",
+                stat["zScore"],
+                "道路:",
+                stat["roadName"]
+            )
 
-        road = match[
-            "road"
-        ]
+    print("===================================")
 
-        results.append({
+    # ==================================
+    # 5. 整理事故資料給前端
+    # ==================================
 
-            # ------------------
-            # 事故資料
-            # ------------------
+    accident_results = []
 
-            "id": accident["id"],
+    for item in matched:
 
-            "lat": accident["lat"],
-            "lng": accident["lng"],
+        point = item["point"]
+        road = item["road"]
+        road_index = item["roadIndex"]
 
-            "year": accident["year"],
-            "month": accident["month"],
+        properties = road.get(
+            "properties",
+            {}
+        )
 
-            "date": accident["date"],
-            "time": accident["time"],
+        accident_results.append({
 
-            "location": accident[
+            "id": point.get("id"),
+
+            "year": point.get("year"),
+
+            "month": point.get("month"),
+
+            "date": point.get("date"),
+
+            "time": point.get("time"),
+
+            "lat": point.get("lat"),
+
+            "lng": point.get("lng"),
+
+            "location": point.get(
                 "location"
-            ],
+            ),
 
-            "weather": accident[
+            "weather": point.get(
                 "weather"
-            ],
+            ),
 
-            "light": accident[
+            "light": point.get(
                 "light"
-            ],
+            ),
 
-            "roadType": accident[
+            "roadType": point.get(
                 "roadType"
-            ],
+            ),
 
-            "speedLimit": accident[
+            "speedLimit": point.get(
                 "speedLimit"
-            ],
+            ),
 
-            # ------------------
-            # OSM 道路資料
-            # ------------------
+            "accidentType": point.get(
+                "accidentType"
+            ),
 
-            "roadName": road[
-                "properties"
-            ].get("name"),
+            "accidentSubType": point.get(
+                "accidentSubType"
+            ),
 
-            "roadHighway": road[
-                "properties"
-            ].get("highway"),
+            # --------------------------
+            # 匹配到的道路
+            # --------------------------
 
-            # ------------------
-            # 距離
-            # ------------------
+            "roadIndex": road_index,
 
-            "distance": match[
+            "roadName": properties.get(
+                "name"
+            ),
+
+            "roadHighway": properties.get(
+                "highway"
+            ),
+
+            "osmid": properties.get(
+                "osmid"
+            ),
+
+            "distance": item[
                 "distance"
             ]
         })
 
-    return jsonify(
-        results
-    )
+    # ==================================
+    # 6. 回傳
+    # ==================================
+
+    return jsonify({
+
+        "higher_is_safer": 
+            HIGHER_IS_SAFER,
+
+        "accidents":
+            accident_results,
+
+        "roadStats":
+            road_stats
+
+    })

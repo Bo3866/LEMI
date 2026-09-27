@@ -23,36 +23,14 @@ def find_nearest_road(
     grid_size=GRID_SIZE
 ):
     """
-    找出一個點附近最近的道路。
-
-    參數：
-        point_lat
-            點的緯度
-
-        point_lng
-            點的經度
-
-        roads
-            OSM 道路 GeoJSON features
-
-        road_grid
-            已建立的道路 Grid
-
-        max_distance
-            最大允許距離（公尺）
-
-        grid_size
-            Grid 大小
+    找距離指定點最近的 OSM 道路。
 
     回傳：
-
-    {
-        "road": 道路資料,
-        "distance": 距離
-    }
-
-    如果找不到：
-        None
+        {
+            "roadIndex": 道路在 roads 裡面的 index,
+            "road": 道路資料,
+            "distance": 距離（公尺）
+        }
     """
 
     point_grid = get_grid_key(
@@ -63,7 +41,6 @@ def find_nearest_road(
 
     candidate_indexes = set()
 
-    # 先找附近的 Grid
     neighbor_grids = get_neighbor_grid_keys(
         point_grid,
         radius=1
@@ -80,21 +57,18 @@ def find_nearest_road(
             road_indexes
         )
 
-    # 沒有候選道路
     if not candidate_indexes:
         return None
 
+    nearest_road_index = None
     nearest_road = None
     nearest_distance = float("inf")
 
-    # 只計算候選道路
     for road_index in candidate_indexes:
 
         road = roads[road_index]
 
-        geometry = road.get(
-            "geometry"
-        )
+        geometry = road.get("geometry")
 
         if not geometry:
             continue
@@ -116,16 +90,17 @@ def find_nearest_road(
         if distance < nearest_distance:
 
             nearest_distance = distance
+            nearest_road_index = road_index
             nearest_road = road
 
-    # 超過最大距離
-    if (
-        nearest_road is None
-        or nearest_distance > max_distance
-    ):
+    if nearest_road is None:
+        return None
+
+    if nearest_distance > max_distance:
         return None
 
     return {
+        "roadIndex": nearest_road_index,
         "road": nearest_road,
         "distance": nearest_distance
     }
@@ -138,28 +113,19 @@ def match_points_to_roads(
     grid_size=GRID_SIZE
 ):
     """
-    將多個點資料配對到 OSM 道路。
-
-    points 不限定一定是事故資料。
-
-    每個 point 只需要有：
-
-        lat
-        lng
+    將多個點匹配到最近的道路。
 
     回傳：
-
-    [
-        {
-            "point": 原始點資料,
-            "road": 道路資料,
-            "distance": 距離
-        },
-        ...
-    ]
+        [
+            {
+                "point": 原始點,
+                "roadIndex": 道路 index,
+                "road": 道路資料,
+                "distance": 距離
+            }
+        ]
     """
 
-    # 建立道路 Grid
     road_grid = build_road_grid(
         roads,
         grid_size=grid_size
@@ -172,7 +138,6 @@ def match_points_to_roads(
         lat = point.get("lat")
         lng = point.get("lng")
 
-        # 沒有座標就跳過
         if lat is None or lng is None:
             continue
 
@@ -185,12 +150,12 @@ def match_points_to_roads(
             grid_size=grid_size
         )
 
-        # 找不到道路就跳過
         if match is None:
             continue
 
         results.append({
             "point": point,
+            "roadIndex": match["roadIndex"],
             "road": match["road"],
             "distance": match["distance"]
         })
