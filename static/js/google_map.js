@@ -43,19 +43,7 @@ async function initMap() {
         );
 
 
-        // ==================================
-        // 2. OSM 完成後
-        //    再載入安全特徵
-        // ==================================
-
-        await loadSafetyLayer(
-            map
-        );
-
-
-        console.log(
-            "安全特徵載入完成"
-        );
+        setupLayerControls(map);
 
     } catch (error) {
 
