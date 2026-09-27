@@ -1,37 +1,32 @@
 from flask import Flask, render_template
 
-from safety.accident.routes import (
-    accident_bp
-)
+from safety.routes import safety_bp
 
 
 app = Flask(__name__)
 
 
-# ==============================
-# 首頁
-# ==============================
-
 @app.route("/")
 def index():
-
     return render_template(
         "map.html"
     )
 
 
-# ==============================
-# 註冊安全資料 API
-# ==============================
-
 app.register_blueprint(
-    accident_bp
+    safety_bp
 )
 
 
-# ==============================
-# 啟動 Flask
-# ==============================
+print("目前 Flask 路由：")
+
+for rule in app.url_map.iter_rules():
+    print(
+        rule,
+        "->",
+        rule.endpoint
+    )
+
 
 if __name__ == "__main__":
 

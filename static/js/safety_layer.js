@@ -23,6 +23,13 @@ let safetyMarkers = [];
 
 
 // ======================================
+// 毒品行政區圖層
+// ======================================
+
+let drugDistrictLayer = null;
+
+
+// ======================================
 // Z-score → 顏色
 // ======================================
 
@@ -33,37 +40,24 @@ function getColorByZScore(
 
     let value = zScore;
 
-
-    // 如果數值越高代表越安全
-    // 為了讓「紅色 = 高風險」
-    // 所以反轉 Z-score
-
     if (higherIsSafer) {
-
         value = -value;
     }
 
-
     // Z > 1
     if (value > 1) {
-
         return "#D32F2F";
     }
 
-
     // 0 < Z <= 1
     if (value > 0) {
-
         return "#F57C00";
     }
 
-
     // -1 < Z <= 0
     if (value > -1) {
-
         return "#FBC02D";
     }
-
 
     // Z <= -1
     return "#1976D2";
@@ -94,7 +88,6 @@ function applyRoadZScoreColors(
             );
         }
     );
-
 
     console.log(
         "Z-score 道路染色完成，共",
@@ -171,11 +164,6 @@ function createSafetyMarker(
 
 // ======================================
 // 啟用 A1
-//
-// 目前先寫 A1。
-// 未來資料庫建立後，
-// 可以把 API、名稱、higher_is_safer
-// 改成由資料庫提供。
 // ======================================
 
 async function enableA1Layer(
@@ -208,25 +196,13 @@ async function enableA1Layer(
             await response.json();
 
 
-        // ==================================
-        // 道路統計
-        // ==================================
-
         const roadStats =
             data.roadStats || [];
 
 
-        // ==================================
-        // A1 事故點
-        // ==================================
-
         const accidents =
             data.accidents || [];
 
-
-        // ==================================
-        // 安全特徵方向
-        // ==================================
 
         const higherIsSafer =
             data.higher_is_safer === true;
@@ -273,7 +249,6 @@ async function enableA1Layer(
                         item
                     );
 
-
                 safetyMarkers.push(
                     marker
                 );
@@ -307,10 +282,6 @@ function disableA1Layer() {
     );
 
 
-    // ==================================
-    // 清除 A1 Marker
-    // ==================================
-
     safetyMarkers.forEach(
         function(marker) {
 
@@ -322,15 +293,338 @@ function disableA1Layer() {
     safetyMarkers = [];
 
 
-    // ==================================
-    // 恢復 OSM 原本顏色
-    // ==================================
-
     resetRoadColors();
 
 
     console.log(
         "A1 圖層已清除"
+    );
+}
+
+
+// ======================================
+// 毒品犯罪
+//
+// API：
+// /api/drug-districts
+//
+// 資料：
+// town_boundary.geojson
+//
+// 每個行政區會有：
+// drug_count
+// drug_records
+// district_name
+// ======================================
+
+
+// ======================================
+// 毒品犯罪 → 顏色
+// ======================================
+
+function getDrugDistrictColor(
+    count
+) {
+
+    // 0 件
+    if (count === 0) {
+        return "#BDBDBD";
+    }
+
+    // 1 ~ 100
+    if (count <= 100) {
+        return "#FFF59D";
+    }
+
+    // 101 ~ 500
+    if (count <= 500) {
+        return "#FFB74D";
+    }
+
+    // 501 ~ 1000
+    if (count <= 1000) {
+        return "#F57C00";
+    }
+
+    // > 1000
+    return "#D32F2F";
+}
+
+
+// ======================================
+// 啟用毒品行政區圖層
+// ======================================
+
+async function enableDrugLayer(
+    map
+) {
+
+    console.log(
+        "開始載入毒品犯罪行政區..."
+    );
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/drug-districts"
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "毒品 API HTTP 錯誤：" +
+                response.status
+            );
+        }
+
+
+        const geojson =
+            await response.json();
+
+
+        console.log(
+            "毒品行政區 GeoJSON 載入完成"
+        );
+
+
+        // ==================================
+        // 建立 Google Maps Data 圖層
+        // ==================================
+
+        drugDistrictLayer =
+            new google.maps.Data();
+
+
+        // ==================================
+        // 行政區樣式
+        // ==================================
+
+        drugDistrictLayer.setStyle(
+            function(feature) {
+
+                const count =
+                    Number(
+                        feature.getProperty(
+                            "drug_count"
+                        )
+                    ) || 0;
+
+
+                const color =
+                    getDrugDistrictColor(
+                        count
+                    );
+
+
+                return {
+
+                    fillColor: color,
+
+                    fillOpacity: 0.45,
+
+                    strokeColor: "#555555",
+
+                    strokeWeight: 1.5,
+
+                    strokeOpacity: 0.8
+                };
+            }
+        );
+
+
+        // ==================================
+        // 加到地圖
+        // ==================================
+
+        drugDistrictLayer.setMap(
+            map
+        );
+
+
+        // ==================================
+        // 把 GeoJSON 加進 Data layer
+        // ==================================
+
+        drugDistrictLayer.addGeoJson(
+            geojson
+        );
+
+
+        // ==================================
+        // 點擊行政區
+        // ==================================
+
+        drugDistrictLayer.addListener(
+            "click",
+            function(event) {
+
+                const districtName =
+                    event.feature.getProperty(
+                        "district_name"
+                    ) || "未知行政區";
+
+
+                const count =
+                    Number(
+                        event.feature.getProperty(
+                            "drug_count"
+                        )
+                    ) || 0;
+
+
+                const records =
+                    event.feature.getProperty(
+                        "drug_records"
+                    ) || [];
+
+
+                let content = `
+                    <div
+                        style="
+                            max-width: 350px;
+                            max-height: 400px;
+                            overflow-y: auto;
+                        "
+                    >
+
+                        <h3>
+                            ${districtName}
+                        </h3>
+
+                        <p>
+                            💊 毒品案件數量：
+                            <b>${count}</b> 件
+                        </p>
+                `;
+
+
+                // ==================================
+                // 顯示案件
+                // ==================================
+
+                if (records.length === 0) {
+
+                    content += `
+                        <p>
+                            此行政區沒有毒品案件資料。
+                        </p>
+                    `;
+
+                } else {
+
+                    content += `
+                        <hr>
+                        <b>案件資料</b>
+                    `;
+
+
+                    records.forEach(
+                        function(record) {
+
+                            content += `
+                                <hr>
+
+                                <div>
+
+                                    <b>
+                                        案件編號：
+                                    </b>
+                                    ${record.no || "無資料"}
+                                    <br>
+
+                                    <b>
+                                        日期：
+                                    </b>
+                                    ${record.date || "無資料"}
+                                    <br>
+
+                                    <b>
+                                        地址：
+                                    </b>
+                                    ${record.address || "無資料"}
+                                    <br>
+
+                                    <b>
+                                        毒品：
+                                    </b>
+                                    ${record.drug || "無資料"}
+                                    <br>
+
+                                    <b>
+                                        重量：
+                                    </b>
+                                    ${record.weight_g || "無資料"} g
+
+                                </div>
+                            `;
+                        }
+                    );
+                }
+
+
+                content += `
+                    </div>
+                `;
+
+
+                const infoWindow =
+                    new google.maps.InfoWindow({
+                        content: content
+                    });
+
+
+                infoWindow.setPosition(
+                    event.latLng
+                );
+
+
+                infoWindow.open({
+                    map: map
+                });
+            }
+        );
+
+
+        console.log(
+            "毒品犯罪行政區圖層載入完成"
+        );
+
+    } catch (error) {
+
+        console.error(
+            "毒品犯罪圖層載入失敗：",
+            error
+        );
+    }
+}
+
+
+// ======================================
+// 關閉毒品行政區圖層
+// ======================================
+
+function disableDrugLayer() {
+
+    console.log(
+        "關閉毒品犯罪行政區"
+    );
+
+
+    if (drugDistrictLayer) {
+
+        drugDistrictLayer.setMap(
+            null
+        );
+
+        drugDistrictLayer = null;
+    }
+
+
+    console.log(
+        "毒品犯罪行政區圖層已清除"
     );
 }
 
@@ -343,38 +637,78 @@ function setupLayerControls(
     map
 ) {
 
+    // ==================================
+    // A1
+    // ==================================
+
     const a1Toggle =
         document.getElementById(
             "a1-toggle"
         );
 
 
-    if (!a1Toggle) {
+    if (a1Toggle) {
 
-        console.error(
-            "找不到 a1-toggle"
+        a1Toggle.addEventListener(
+            "change",
+            async function() {
+
+                if (this.checked) {
+
+                    await enableA1Layer(
+                        map
+                    );
+
+                } else {
+
+                    disableA1Layer();
+                }
+            }
         );
 
-        return;
+    } else {
+
+        console.warn(
+            "找不到 a1-toggle"
+        );
     }
 
 
-    a1Toggle.addEventListener(
-        "change",
-        async function() {
+    // ==================================
+    // 毒品
+    // ==================================
 
-            if (this.checked) {
+    const drugToggle =
+        document.getElementById(
+            "drug-toggle"
+        );
 
-                await enableA1Layer(
-                    map
-                );
 
-            } else {
+    if (drugToggle) {
 
-                disableA1Layer();
+        drugToggle.addEventListener(
+            "change",
+            async function() {
+
+                if (this.checked) {
+
+                    await enableDrugLayer(
+                        map
+                    );
+
+                } else {
+
+                    disableDrugLayer();
+                }
             }
-        }
-    );
+        );
+
+    } else {
+
+        console.warn(
+            "找不到 drug-toggle"
+        );
+    }
 
 
     console.log(
