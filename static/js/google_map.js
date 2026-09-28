@@ -3,6 +3,8 @@ const FJU_CENTER = {
     lng: 121.433167
 };
 
+let map = null;
+
 
 // ======================================
 // Google Maps 初始化
@@ -10,7 +12,7 @@ const FJU_CENTER = {
 
 async function initMap() {
 
-    const map =
+    map =
         new google.maps.Map(
             document.getElementById(
                 "map"

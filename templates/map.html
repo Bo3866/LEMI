@@ -16,6 +16,12 @@
 
 <h1>安心導航</h1>
 
+<div id="search-control">
+    <h3>地點 / 地址定位</h3>
+    <input type="text" id="address-input" placeholder="請輸入地址或地名 (例: 輔仁大學)">
+    <button onclick="searchAddress()">搜尋定位</button>
+</div>
+
 <div id="layer-control">
 
     <h3>圖層控制</h3>
@@ -64,6 +70,93 @@
 <script
     async
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCGxWaDtZh5VHbTnEmjUkQc0pitHq5cwVs&callback=initMap">
+</script>
+
+<script>
+let geocodeMarker = null;
+
+function searchAddress() {
+    const addressInput = document.getElementById('address-input').value.trim();
+    if (!addressInput) {
+        alert('請先輸入地址或地點！');
+        return;
+    }
+
+    fetch('/api/geocode', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ address: addressInput })
+    })
+    .then(async response => {
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.message || `HTTP error! status: ${response.status}`);
+        }
+        return result;
+    })
+    .then(result => {
+        console.log("後端回傳結果：", result); // 可以在主控台查看真正的 Response
+
+        if (result.status === 'success' && result.data) {
+            const data = result.data;
+            
+            // 強制轉型為浮點數 Number (避免字串導致 Google Maps 噴錯)
+            const lat = parseFloat(data.latitude || data.lat);
+            const lng = parseFloat(data.longitude || data.lng);
+            
+            if (isNaN(lat) || isNaN(lng)) {
+                alert("座標解析失敗，請重新搜尋！");
+                return;
+            }
+
+            const formattedAddress = data.formatted_address || addressInput;
+
+            // 確保 google.maps API 有順利載入
+            if (typeof google !== 'undefined' && google.maps && typeof map !== 'undefined' && map) {
+                // 建立標準 Google LatLng 物件
+                const googleLatLng = new google.maps.LatLng(lat, lng);
+
+                // 地圖平移與縮放
+                map.panTo(googleLatLng);
+                map.setZoom(16);
+
+                // 清除舊標記
+                if (geocodeMarker) {
+                    geocodeMarker.setMap(null);
+                }
+
+                // 新增新標記 (帶 DROP 動畫)
+                geocodeMarker = new google.maps.Marker({
+                    position: googleLatLng,
+                    map: map,
+                    title: formattedAddress,
+                    animation: google.maps.Animation.DROP
+                });
+
+                // 彈出資訊視窗
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `<div style="color:black; padding:8px; font-size:14px;">
+                                <strong>📍 定位成功</strong><br>
+                                ${formattedAddress}
+                              </div>`
+                });
+
+                infoWindow.open(map, geocodeMarker);
+            } else {
+                // 如果地圖元件未載入，至少跳出座標提示
+                alert(`定位成功！\n地址：${formattedAddress}\n緯度: ${lat}, 經度: ${lng}`);
+            }
+        } else {
+            alert(result.message || '找不到該地址！');
+        }
+    })
+    .catch(error => {
+        console.error('真實報錯細節:', error);
+        alert(`定位失敗：${error.message || '請檢查網路連線或後端服務。'}`);
+    });
+}
 </script>
 
 </body>
