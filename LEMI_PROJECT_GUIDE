@@ -1,0 +1,182 @@
+LEMI 專案程式說明
+==================
+
+一、專案用途
+------------
+LEMI 是一個使用 Flask 建立的地圖與安全資訊網站，包含：
+
+1. 顯示地圖頁面。
+2. 載入 GeoJSON 地理資料。
+3. 顯示事故與犯罪等安全資訊。
+4. 進行距離、網格及道路相關的空間分析。
+5. 從 CSV、JSON、OSM 或 ZIP 資料來源取得資料。
+
+
+二、主要程式
+------------
+
+app.py
+------
+Flask 應用程式的主要啟動檔案。
+
+主要功能：
+
+1. 建立 Flask 應用程式。
+2. 將首頁 "/" 指向 templates/map.html。
+3. 載入 safety.routes 中的 safety_bp。
+4. 註冊安全相關的 Flask 路由。
+5. 啟動時列出目前註冊的 Flask 路由。
+6. 使用 127.0.0.1:5000 啟動網站。
+
+啟動方式：
+
+python app.py
+
+網站網址：
+
+http://127.0.0.1:5000
+
+
+三、網頁模板
+------------
+
+templates/map.html
+------------------
+地圖網頁的 HTML 模板，負責建立地圖頁面、載入前端 JavaScript
+以及提供使用者操作介面。
+
+
+四、前端靜態檔案
+----------------
+
+static/js/google_map.js
+-----------------------
+負責 Google Maps 地圖相關功能，例如建立地圖、設定地圖位置及
+顯示地圖內容。
+
+static/js/osm_layer.js
+----------------------
+負責 OpenStreetMap 圖層相關功能，例如載入及顯示 OSM 道路資料。
+
+static/js/safety_layer.js
+-------------------------
+負責將事故、犯罪或其他安全相關資料顯示在地圖上。
+
+static/town_boundary.geojson
+----------------------------
+行政區或城鎮邊界資料，使用 GeoJSON 格式儲存，可用於地圖上的
+區域範圍顯示。
+
+static/test_jingxintang_edges_cut_roads.geojson
+------------------------------------------------
+道路切割或道路邊界的測試資料，使用 GeoJSON 格式儲存，可供道路
+分析或地圖顯示使用。
+
+
+五、安全功能
+------------
+
+safety/routes.py
+----------------
+定義安全功能的 Flask Blueprint 及 API 路由，負責呼叫事故、犯罪等安全資料處理模組，
+並將分析結果以 JSON 或 GeoJSON 格式提供給前端。
+
+safety/accident/a1.py
+---------------------
+處理a1事故相關資料或功能。
+
+safety/crime/drug.py
+--------------------
+處理毒品犯罪或相關犯罪資料。
+
+safety/__init__.py
+------------------
+將 safety 資料夾定義為 Python 套件。
+
+
+六、空間分析功能
+----------------
+
+spatial/distance.py
+-------------------
+負責計算座標點與道路線段或道路 LineString 之間的距離。
+
+spatial/grid.py
+---------------
+負責建立空間網格索引，將道路依座標分配至網格，以縮小道路匹配時需要搜尋的範圍。
+
+spatial/road_matcher.py
+-----------------------
+負責將座標、事件位置或其他資料與道路進行比對。
+
+spatial/__init__.py
+-------------------
+將 spatial 資料夾定義為 Python 套件。
+
+
+七、資料取得功能
+----------------
+
+data_fetch/csv_api.py
+---------------------
+負責讀取或處理 CSV 格式資料。
+
+data_fetch/json_api.py
+----------------------
+負責讀取、處理 JSON 資料，或向 JSON API 取得資料。
+
+data_fetch/osm.py
+-----------------
+負責讀取本地儲存的 OpenStreetMap 道路 GeoJSON 資料。
+
+data_fetch/zip_api.py
+---------------------
+負責處理 ZIP 壓縮檔或從相關來源取得壓縮資料。
+
+data_fetch/__init__.py
+----------------------
+將 data_fetch 資料夾定義為 Python 套件。
+
+
+八、整體資料流程
+----------------
+
+1. 使用者開啟網站。
+2. app.py 載入 templates/map.html。
+3. map.html 載入 static/js/ 中的 JavaScript。
+4. 前端建立地圖並載入地理資料。
+5. 後端透過 safety/routes.py 提供安全相關路由。
+6. data_fetch/ 負責取得或讀取原始資料。
+7. spatial/ 負責進行空間分析。
+8. 分析結果由前端顯示在地圖上。
+
+
+九、資料夾分工
+--------------
+
+templates/
+    存放 HTML 網頁模板。
+
+static/
+    存放前端 JavaScript 及 GeoJSON 地理資料。
+
+safety/
+    存放事故、犯罪及其他安全功能。
+
+spatial/
+    存放距離、網格及道路比對等空間分析功能。
+
+data_fetch/
+    存放不同格式及來源的資料取得功能。
+
+
+十、開發注意事項
+----------------
+
+1. Flask 路由主要集中在 app.py 與 safety/routes.py。
+2. 地圖顯示相關功能放在 static/js/。
+3. 空間分析功能放在 spatial/。
+4. 外部資料取得功能放在 data_fetch/。
+5. HTML 頁面放在 templates/。
+6. GeoJSON 檔案是地圖或空間分析使用的地理資料。
+7. 新增功能時，應放入對應的資料夾，避免不同功能混在同一個檔案中。
